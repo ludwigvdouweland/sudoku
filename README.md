@@ -79,6 +79,11 @@ puzzle-fetch request when "Online source" is enabled.
 index.html            Page structure
 css/styles.css         Styling (light/dark themes via CSS variables)
 js/sudoku-engine.js    Pure Sudoku logic: generate, solve, validate
+js/milp-solver.js      Two MILP (mixed-integer programming) formulations of Sudoku,
+                        solved via the vendored javascript-lp-solver — reference
+                        implementations, not wired into the UI (see the perf caveat
+                        at the top of the file). Try them with milp-test.html.
+js/vendor/lp-solver.js Vendored copy of javascript-lp-solver (The Unlicense)
 js/api.js              Optional web puzzle source (opt-in, fails gracefully)
 js/storage.js          Local history/attempts persistence (localStorage)
 js/estimate.js         Modeled solve-time distribution for the percentile estimate
