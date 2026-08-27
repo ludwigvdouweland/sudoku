@@ -70,6 +70,8 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 10px;
 }
 .topbar h1 {
   font-size: 1.5rem;
@@ -84,7 +86,7 @@ html, body {
   object-fit: contain;
   flex-shrink: 0;
 }
-.topbar-actions { display: flex; gap: 8px; }
+.topbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
 .icon-btn {
   background: var(--panel);
@@ -499,4 +501,108 @@ html, body {
 @media (max-width: 420px) {
   .action-row { justify-content: center; }
   .toggle-btn { flex: 1 1 45%; }
+  .icon-btn { width: 34px; height: 34px; font-size: 1rem; }
 }
+
+/* --- Instructions modal --- */
+.instructions-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 23;
+  padding: 18px;
+}
+.instructions-modal.hidden { display: none; }
+
+.instructions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.instructions-header h2 { margin: 0; font-size: 1.15rem; }
+
+.instructions-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.instructions-tab {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.instructions-tab:hover { background: var(--peer); }
+.instructions-tab.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+}
+
+.instructions-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.instructions-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  width: min(260px, 66vw);
+  aspect-ratio: 1 / 1;
+  background: var(--thick-line);
+  border: 2px solid var(--thick-line);
+  border-radius: 6px;
+  overflow: hidden;
+  gap: 1px;
+}
+.instructions-cell {
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(9px, 2.2vw, 13px);
+  color: var(--text-dim);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.instructions-cell[data-col='2'], .instructions-cell[data-col='5'] { border-right: 2px solid var(--thick-line); }
+.instructions-cell[data-row='2'], .instructions-cell[data-row='5'] { border-bottom: 2px solid var(--thick-line); }
+.instructions-cell.box-active {
+  background: var(--selected);
+  color: var(--user-text);
+  font-weight: 700;
+}
+
+.instructions-text { text-align: center; }
+.instructions-text h3 { margin: 0 0 6px; font-size: 1rem; }
+.instructions-text p { margin: 0; color: var(--text-dim); font-size: 0.86rem; line-height: 1.45; }
+
+.instructions-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 18px;
+}
+.instructions-nav button:disabled { opacity: 0.45; cursor: default; }

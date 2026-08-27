@@ -63,6 +63,17 @@ const historyList = document.getElementById('historyList');
 const overallStats = document.getElementById('overallStats');
 const diffButtons = Array.from(document.querySelectorAll('.diff-btn'));
 const candButtons = Array.from(document.querySelectorAll('.cand-btn'));
+const instructionsBtn = document.getElementById('instructionsBtn');
+const closeInstructionsBtn = document.getElementById('closeInstructionsBtn');
+const instructionsModal = document.getElementById('instructionsModal');
+const instructionsBackdrop = document.getElementById('instructionsBackdrop');
+const instructionsTabs = document.getElementById('instructionsTabs');
+const instructionsGrid = document.getElementById('instructionsGrid');
+const instructionsStepTitle = document.getElementById('instructionsStepTitle');
+const instructionsStepText = document.getElementById('instructionsStepText');
+const instructionsProgress = document.getElementById('instructionsProgress');
+const instructionsPrevBtn = document.getElementById('instructionsPrevBtn');
+const instructionsNextBtn = document.getElementById('instructionsNextBtn');
 
 const cellEls = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
 
@@ -589,6 +600,149 @@ function renderHistoryPanel() {
 }
 
 // ---------------------------------------------------------------------------
+// Instructions ("How to play") — a 9-step walkthrough, one step per 3x3 box,
+// stepped through with tabs or Prev/Next. Runs against its own small static
+// illustration grid rather than the live board, so it never touches game state.
+// ---------------------------------------------------------------------------
+
+const INSTRUCTIONS_SAMPLE = [
+  [5, 3, 4, 6, 7, 8, 9, 1, 2],
+  [6, 7, 2, 1, 9, 5, 3, 4, 8],
+  [1, 9, 8, 3, 4, 2, 5, 6, 7],
+  [8, 5, 9, 7, 6, 1, 4, 2, 3],
+  [4, 2, 6, 8, 5, 3, 7, 9, 1],
+  [7, 1, 3, 9, 2, 4, 8, 5, 6],
+  [9, 6, 1, 5, 3, 7, 2, 8, 4],
+  [2, 8, 7, 4, 1, 9, 6, 3, 5],
+  [3, 4, 5, 2, 8, 6, 1, 7, 9],
+];
+
+const INSTRUCTIONS_STEPS = [
+  {
+    title: 'The goal',
+    text: "Fill every row, column, and 3×3 box with the digits 1–9 — no repeats. Bold numbers are the puzzle's givens and can't be changed.",
+  },
+  {
+    title: 'Pick a cell',
+    text: 'Click any empty cell, or move around with the arrow keys, to select it. The selected cell gets a highlighted border.',
+  },
+  {
+    title: 'Enter a number',
+    text: 'With a cell selected, tap 1–9 on the number pad (or your keyboard) to fill it. Backspace, Delete, 0, or ⌫ clears it.',
+  },
+  {
+    title: 'See your peers',
+    text: "Selecting a cell lights up its row, column, and box — its \"peers\" — plus every other cell holding the same number, so conflicts jump out.",
+  },
+  {
+    title: 'Mistakes are tracked',
+    text: "An entry that doesn't match the solution turns red and adds to your Mistakes counter — but the game keeps going, so you can fix it and carry on.",
+  },
+  {
+    title: 'Pencil in notes',
+    text: 'Toggle ✏️ Notes (or press N) to jot small candidate numbers in a cell instead of committing to one — handy while narrowing things down.',
+  },
+  {
+    title: 'Auto candidates',
+    text: 'The Candidates row can show every legal number for a cell automatically — for the selected cell, all cells, or just the cells with the fewest options left.',
+  },
+  {
+    title: 'Hint & Solve',
+    text: '💡 Hint fills in the selected cell for you. 🧠 Solve completes the whole board instantly if you want to see the answer.',
+  },
+  {
+    title: 'Track your progress',
+    text: 'Pick a difficulty, hit New Game any time, and check 📜 History for your stats and best times. Good luck!',
+  },
+];
+
+const instructionsCellEls = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+let instructionsStep = 0;
+
+function buildInstructionsDom() {
+  instructionsGrid.innerHTML = '';
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'instructions-cell';
+      cell.dataset.row = String(r);
+      cell.dataset.col = String(c);
+      cell.textContent = String(INSTRUCTIONS_SAMPLE[r][c]);
+      instructionsGrid.appendChild(cell);
+      instructionsCellEls[r][c] = cell;
+    }
+  }
+
+  instructionsTabs.innerHTML = '';
+  INSTRUCTIONS_STEPS.forEach((_, i) => {
+    const tab = document.createElement('button');
+    tab.className = 'instructions-tab';
+    tab.textContent = String(i + 1);
+    tab.setAttribute('aria-label', `Step ${i + 1}`);
+    tab.addEventListener('click', () => {
+      sfx.click();
+      showInstructionsStep(i);
+    });
+    instructionsTabs.appendChild(tab);
+  });
+}
+
+function showInstructionsStep(index) {
+  instructionsStep = Math.min(INSTRUCTIONS_STEPS.length - 1, Math.max(0, index));
+  const step = INSTRUCTIONS_STEPS[instructionsStep];
+  const boxRow = Math.floor(instructionsStep / 3);
+  const boxCol = instructionsStep % 3;
+
+  instructionsStepTitle.textContent = step.title;
+  instructionsStepText.textContent = step.text;
+  instructionsProgress.textContent = `${instructionsStep + 1} / ${INSTRUCTIONS_STEPS.length}`;
+  instructionsPrevBtn.disabled = instructionsStep === 0;
+  instructionsNextBtn.textContent = instructionsStep === INSTRUCTIONS_STEPS.length - 1 ? 'Done' : 'Next →';
+
+  Array.from(instructionsTabs.children).forEach((tab, i) => {
+    tab.classList.toggle('active', i === instructionsStep);
+  });
+
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const inBox = Math.floor(r / 3) === boxRow && Math.floor(c / 3) === boxCol;
+      instructionsCellEls[r][c].classList.toggle('box-active', inBox);
+    }
+  }
+}
+
+function openInstructions() {
+  showInstructionsStep(0);
+  instructionsModal.classList.remove('hidden');
+  instructionsBackdrop.classList.remove('hidden');
+}
+function closeInstructions() {
+  instructionsModal.classList.add('hidden');
+  instructionsBackdrop.classList.add('hidden');
+}
+
+buildInstructionsDom();
+
+instructionsBtn.addEventListener('click', () => {
+  sfx.click();
+  openInstructions();
+});
+closeInstructionsBtn.addEventListener('click', () => {
+  sfx.click();
+  closeInstructions();
+});
+instructionsBackdrop.addEventListener('click', closeInstructions);
+instructionsPrevBtn.addEventListener('click', () => {
+  sfx.click();
+  showInstructionsStep(instructionsStep - 1);
+});
+instructionsNextBtn.addEventListener('click', () => {
+  sfx.click();
+  if (instructionsStep === INSTRUCTIONS_STEPS.length - 1) closeInstructions();
+  else showInstructionsStep(instructionsStep + 1);
+});
+
+// ---------------------------------------------------------------------------
 // Theme
 // ---------------------------------------------------------------------------
 
@@ -707,6 +861,12 @@ closeHistoryBtn.addEventListener('click', () => {
 historyBackdrop.addEventListener('click', closeHistoryPanel);
 
 document.addEventListener('keydown', (e) => {
+  if (!instructionsModal.classList.contains('hidden')) {
+    if (e.key === 'Escape') closeInstructions();
+    else if (e.key === 'ArrowRight') showInstructionsStep(instructionsStep + 1);
+    else if (e.key === 'ArrowLeft') showInstructionsStep(instructionsStep - 1);
+    return;
+  }
   if (!historyPanel.classList.contains('hidden') && e.key === 'Escape') {
     closeHistoryPanel();
     return;
