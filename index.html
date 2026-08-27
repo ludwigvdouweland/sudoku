@@ -12,6 +12,7 @@
     <header class="topbar">
       <h1><img class="brand-logo" src="LogoSquare.png" alt="The Logic Factory logo" />Sudoku</h1>
       <div class="topbar-actions">
+        <button id="instructionsBtn" class="icon-btn" title="How to play" aria-label="How to play">❓</button>
         <button id="historyBtn" class="icon-btn" title="History &amp; stats" aria-label="History and stats">📜</button>
         <button id="solverBtn" class="icon-btn" title="Solver comparison" aria-label="Solver comparison">🧮</button>
         <button id="soundToggle" class="icon-btn" title="Toggle sound effects" aria-label="Toggle sound effects">🔊</button>
@@ -118,6 +119,27 @@
     <div id="solverList" class="solver-list"></div>
   </aside>
   <div id="solverBackdrop" class="backdrop hidden"></div>
+
+  <div id="instructionsBackdrop" class="backdrop hidden"></div>
+  <div id="instructionsModal" class="instructions-modal hidden" role="dialog" aria-label="How to play" aria-modal="true">
+    <div class="instructions-header">
+      <h2>❓ How to Play</h2>
+      <button id="closeInstructionsBtn" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+    <div id="instructionsTabs" class="instructions-tabs"></div>
+    <div class="instructions-body">
+      <div id="instructionsGrid" class="instructions-grid"></div>
+      <div class="instructions-text">
+        <h3 id="instructionsStepTitle"></h3>
+        <p id="instructionsStepText"></p>
+      </div>
+    </div>
+    <div class="instructions-nav">
+      <button id="instructionsPrevBtn" class="secondary-btn">← Back</button>
+      <span id="instructionsProgress" class="tag"></span>
+      <button id="instructionsNextBtn" class="primary-btn">Next →</button>
+    </div>
+  </div>
 
 <script type="module" src="js/app.js"></script>
 </body>
