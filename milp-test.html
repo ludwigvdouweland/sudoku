@@ -1,3 +1,13 @@
+<!--
+  Manual smoke test for js/milp-solver.js -- not linked from index.html or
+  used by the app. Serve the repo (see README's "Running it" section) and
+  open this file directly, e.g. http://localhost:8000/milp-test.html, to
+  compare the backtracking solver against both MILP formulations (both
+  solved by HiGHS, see js/vendor/highs/) on the classic 30-clue example
+  puzzle. Both MILP calls are async (HiGHS's WASM module loads lazily) --
+  expect this to finish in well under a second once the ~3.4MB wasm file
+  has loaded.
+-->
 <!doctype html>
 <html>
 <head><meta charset="UTF-8" /><title>MILP solver smoke test</title></head>
@@ -21,8 +31,7 @@
     [3,4,5, 2,8,6, 1,7,9],
   ];
 
-  // Full 30-clue puzzle (the classic Wikipedia example) for the binary
-  // formulation, which is expected to be fast.
+  // The classic 30-clue Wikipedia example puzzle.
   const puzzle30 = [
     [5,3,0, 0,7,0, 0,0,0],
     [6,0,0, 1,9,5, 0,0,0],
@@ -35,29 +44,21 @@
     [0,0,0, 0,8,0, 0,7,9],
   ];
 
-  // Near-complete grid (only 6 empty cells) for the integer formulation --
-  // a full 30-clue puzzle turned out to be impractically slow for this
-  // pure-JS big-M solver (see chat notes), so this is a *functional*
-  // smoke test of the code path, not a performance test.
-  const puzzleNearFull = cloneGrid(knownSolution);
-  const emptied = [[0,0],[1,4],[3,3],[5,7],[6,2],[8,8]];
-  for (const [r,c] of emptied) puzzleNearFull[r][c] = 0;
-
   const lines = [];
   function log(s) { lines.push(s); document.getElementById('out').textContent = lines.join('\n'); console.log(s); }
 
   log('Reference (backtracking) matches known solution: ' + gridsEqual(solveGrid(cloneGrid(puzzle30)), knownSolution));
 
-  log('--- Binary MILP (30-clue puzzle): solving...');
+  log('--- Binary MILP (HiGHS): solving...');
   const t0 = performance.now();
-  const binResult = solveGridMILPBinary(cloneGrid(puzzle30));
+  const binResult = await solveGridMILPBinary(cloneGrid(puzzle30));
   const t1 = performance.now();
   log('Binary MILP result: ' + (binResult ? 'feasible' : 'INFEASIBLE/NULL'));
   if (binResult) log('Binary MILP matches known solution: ' + gridsEqual(binResult, knownSolution) + '  (' + Math.round(t1 - t0) + ' ms)');
 
-  log('--- Integer MILP (near-full grid, 6 empty cells): solving...');
+  log('--- Integer MILP (HiGHS): solving...');
   const t2 = performance.now();
-  const intResult = solveGridMILPInteger(cloneGrid(puzzleNearFull), { timeoutMs: 15000 });
+  const intResult = await solveGridMILPInteger(cloneGrid(puzzle30));
   const t3 = performance.now();
   log('Integer MILP result: ' + (intResult ? 'feasible' : 'INFEASIBLE/NULL'));
   if (intResult) log('Integer MILP matches known solution: ' + gridsEqual(intResult, knownSolution) + '  (' + Math.round(t3 - t2) + ' ms)');
