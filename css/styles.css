@@ -1,46 +1,50 @@
 :root {
-  --bg: #f3f4f8;
+  /* Brand palette sourced from the Logic Factory logo (navy #042e6f, red #ed1c24) */
+  --brand-navy: #042e6f;
+  --brand-red: #ed1c24;
+
+  --bg: #f4f6fb;
   --panel: #ffffff;
-  --border: #d7dae3;
-  --grid-line: #c7cbd6;
-  --thick-line: #34384a;
-  --text: #22242e;
-  --text-dim: #6b7080;
-  --given-text: #1c1e28;
-  --user-text: #3060d8;
-  --selected: #cfe0ff;
-  --peer: #e7ecfb;
-  --same-value: #ffdb99;
-  --error-bg: #ffdcdc;
-  --error-text: #c72c2c;
+  --border: #d8deeb;
+  --grid-line: #c5cee2;
+  --thick-line: #042e6f;
+  --text: #142038;
+  --text-dim: #5c6a87;
+  --given-text: #051a3d;
+  --user-text: #042e6f;
+  --selected: #d7e3fa;
+  --peer: #eef1f9;
+  --same-value: #ffd9a0;
+  --error-bg: #fbdada;
+  --error-text: #c81f27;
   --success: #1f9d55;
-  --accent: #3060d8;
+  --accent: #042e6f;
   --accent-contrast: #ffffff;
-  --candidate-color: #0f8f8a;
-  --shadow: 0 8px 24px rgba(30, 34, 54, 0.10);
+  --candidate-color: #0d7d9c;
+  --shadow: 0 8px 24px rgba(4, 46, 111, 0.14);
   --radius: 14px;
 }
 
 :root[data-theme='dark'] {
-  --bg: #14161f;
-  --panel: #1c1f2b;
-  --border: #2c3040;
-  --grid-line: #3a3f52;
-  --thick-line: #b8bfd6;
-  --text: #eef0f8;
-  --text-dim: #9297ab;
-  --given-text: #f5f6fb;
+  --bg: #0b1830;
+  --panel: #111f3d;
+  --border: #24345a;
+  --grid-line: #2c3f68;
+  --thick-line: #90a8dd;
+  --text: #edf1fa;
+  --text-dim: #93a1c3;
+  --given-text: #f6f8fd;
   --user-text: #7ea6ff;
-  --selected: #33456f;
-  --peer: #262b3d;
-  --same-value: #7a5a20;
-  --error-bg: #55232a;
-  --error-text: #ff9393;
+  --selected: #29426f;
+  --peer: #17274a;
+  --same-value: #6b4a17;
+  --error-bg: #4a1f22;
+  --error-text: #ff6b6b;
   --success: #4cd07c;
-  --accent: #5580e8;
-  --accent-contrast: #0e1015;
+  --accent: #3c6fdb;
+  --accent-contrast: #ffffff;
   --candidate-color: #4fd8cf;
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
 }
 
 * { box-sizing: border-box; }
@@ -70,6 +74,15 @@ html, body {
 .topbar h1 {
   font-size: 1.5rem;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .topbar-actions { display: flex; gap: 8px; }
 

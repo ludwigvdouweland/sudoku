@@ -4,6 +4,7 @@ import { SIZE, cloneGrid, solveGrid, generatePuzzle, findConflicts, gridsEqual, 
 import { fetchPuzzleFromWeb } from './api.js';
 import * as store from './storage.js';
 import { estimatePerformance } from './estimate.js';
+import { sfx } from './sounds.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -53,6 +54,7 @@ const retryBtn = document.getElementById('retryBtn');
 const playAgainBtn = document.getElementById('playAgainBtn');
 const numpad = document.getElementById('numpad');
 const themeToggle = document.getElementById('themeToggle');
+const soundToggle = document.getElementById('soundToggle');
 const historyBtn = document.getElementById('historyBtn');
 const closeHistoryBtn = document.getElementById('closeHistoryBtn');
 const historyPanel = document.getElementById('historyPanel');
@@ -189,6 +191,7 @@ async function startNewGame(difficulty, { online }) {
 
   applyGame(game, attempt);
   hideLoading();
+  sfx.newGame();
 }
 
 /** Loads a stored game + attempt into live state (used for New Game, resume, retry). */
@@ -282,6 +285,7 @@ function setCellValue(r, c, value) {
     const set = state.notes[r][c];
     if (set.has(value)) set.delete(value);
     else set.add(value);
+    sfx.note();
     render();
     persistProgress();
     return;
@@ -294,9 +298,13 @@ function setCellValue(r, c, value) {
     if (value !== state.solution[r][c]) {
       state.mistakes += 1;
       mistakesTag.textContent = `Mistakes: ${state.mistakes}`;
+      sfx.error();
     } else {
       clearNoteFromPeers(r, c, value);
+      sfx.place();
     }
+  } else {
+    sfx.erase();
   }
 
   render();
@@ -311,6 +319,7 @@ function applyHint() {
   state.board[r][c] = state.solution[r][c];
   state.notes[r][c].clear();
   clearNoteFromPeers(r, c, state.solution[r][c]);
+  sfx.hint();
   render();
   persistProgress();
   checkCompletion();
@@ -321,6 +330,7 @@ function solvePuzzle() {
   state.board = cloneGrid(state.solution);
   for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) state.notes[r][c].clear();
   state.autoSolved = true;
+  sfx.solve();
   render();
   checkCompletion();
 }
@@ -331,6 +341,7 @@ function checkCompletion() {
 
   state.solved = true;
   stopTimer();
+  if (!state.autoSolved) sfx.win();
 
   // Auto-solved runs are excluded from stats up front so they can never be read
   // back as a "best before" baseline either.
@@ -601,11 +612,28 @@ function updateThemeIcon() {
 }
 
 // ---------------------------------------------------------------------------
+// Sound
+// ---------------------------------------------------------------------------
+
+function updateSoundIcon() {
+  soundToggle.textContent = sfx.isMuted() ? '🔇' : '🔊';
+}
+function toggleSound() {
+  sfx.toggleMuted();
+  updateSoundIcon();
+}
+
+// Audio contexts start suspended until a user gesture unlocks them.
+window.addEventListener('pointerdown', sfx.init, { once: true });
+window.addEventListener('keydown', sfx.init, { once: true });
+
+// ---------------------------------------------------------------------------
 // Event wiring
 // ---------------------------------------------------------------------------
 
 diffButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
+    sfx.click();
     setActiveDifficultyButton(btn.dataset.difficulty);
   });
 });
@@ -622,27 +650,39 @@ function cycleCandidateMode() {
 }
 
 candButtons.forEach((btn) => {
-  btn.addEventListener('click', () => setCandidateMode(btn.dataset.mode));
+  btn.addEventListener('click', () => {
+    sfx.click();
+    setCandidateMode(btn.dataset.mode);
+  });
 });
 
 newGameBtn.addEventListener('click', () => {
+  sfx.click();
   const difficulty = diffButtons.find((b) => b.classList.contains('active'))?.dataset.difficulty || 'normal';
   startNewGame(difficulty, { online: onlineToggle.checked });
 });
 
-retryBtn.addEventListener('click', retryCurrentPuzzle);
+retryBtn.addEventListener('click', () => {
+  sfx.click();
+  retryCurrentPuzzle();
+});
 playAgainBtn.addEventListener('click', () => {
+  sfx.click();
   startNewGame(state.difficulty, { online: onlineToggle.checked });
 });
 
 notesBtn.addEventListener('click', () => {
+  sfx.click();
   state.notesMode = !state.notesMode;
   notesBtn.setAttribute('aria-pressed', String(state.notesMode));
 });
 
 hintBtn.addEventListener('click', applyHint);
 solveBtn.addEventListener('click', solvePuzzle);
-resetBtn.addEventListener('click', resetBoard);
+resetBtn.addEventListener('click', () => {
+  sfx.click();
+  resetBoard();
+});
 
 numpad.addEventListener('click', (e) => {
   const btn = e.target.closest('.num-btn');
@@ -651,9 +691,19 @@ numpad.addEventListener('click', (e) => {
   setCellValue(r, c, Number(btn.dataset.num));
 });
 
-themeToggle.addEventListener('click', toggleTheme);
-historyBtn.addEventListener('click', openHistoryPanel);
-closeHistoryBtn.addEventListener('click', closeHistoryPanel);
+themeToggle.addEventListener('click', () => {
+  sfx.click();
+  toggleTheme();
+});
+soundToggle.addEventListener('click', toggleSound);
+historyBtn.addEventListener('click', () => {
+  sfx.click();
+  openHistoryPanel();
+});
+closeHistoryBtn.addEventListener('click', () => {
+  sfx.click();
+  closeHistoryPanel();
+});
 historyBackdrop.addEventListener('click', closeHistoryPanel);
 
 document.addEventListener('keydown', (e) => {
@@ -691,6 +741,7 @@ document.addEventListener('keydown', (e) => {
 function boot() {
   buildBoardDom();
   initTheme();
+  updateSoundIcon();
 
   const pointer = store.getCurrentPointer();
   if (pointer && pointer.gameId) {
