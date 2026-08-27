@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sudoku</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧩</text></svg>" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>🧩 Sudoku</h1>
+      <div class="topbar-actions">
+        <button id="historyBtn" class="icon-btn" title="History &amp; stats" aria-label="History and stats">📜</button>
+        <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <div class="difficulty-select" role="group" aria-label="Difficulty">
+        <button class="diff-btn" data-difficulty="easy">Easy</button>
+        <button class="diff-btn active" data-difficulty="normal">Normal</button>
+        <button class="diff-btn" data-difficulty="hard">Hard</button>
+      </div>
+      <label class="online-toggle" title="When on, New Game tries to fetch a puzzle from the web first, falling back to a locally generated one if unavailable.">
+        <input type="checkbox" id="onlineToggle" />
+        <span>Online source</span>
+      </label>
+      <button id="newGameBtn" class="primary-btn">New Game</button>
+    </div>
+
+    <div class="status-bar">
+      <span id="sourceTag" class="tag">—</span>
+      <span id="timer" class="tag">00:00</span>
+      <span id="mistakes" class="tag">Mistakes: 0</span>
+    </div>
+
+    <main class="board-wrap">
+      <div id="board" class="board" role="grid" aria-label="Sudoku board"></div>
+
+      <div id="loadingOverlay" class="overlay hidden">
+        <div class="spinner"></div>
+        <p id="loadingText">Generating puzzle…</p>
+      </div>
+
+      <div id="winOverlay" class="overlay hidden">
+        <div class="win-card">
+          <h2>🎉 Solved!</h2>
+          <dl id="winStats" class="win-stats"></dl>
+          <p id="winFootnote" class="win-footnote"></p>
+          <div class="win-actions">
+            <button id="retryBtn" class="secondary-btn">Retry this puzzle</button>
+            <button id="playAgainBtn" class="primary-btn">New Game</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="candidates-row">
+      <span class="candidates-label">Candidates</span>
+      <div class="candidate-select" role="group" aria-label="Candidate display mode">
+        <button class="cand-btn active" data-mode="off">Off</button>
+        <button class="cand-btn" data-mode="selected">Selected cell</button>
+        <button class="cand-btn" data-mode="all">All cells</button>
+        <button class="cand-btn" data-mode="fewest">Fewest options</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="numpad" id="numpad">
+        <button class="num-btn" data-num="1">1</button>
+        <button class="num-btn" data-num="2">2</button>
+        <button class="num-btn" data-num="3">3</button>
+        <button class="num-btn" data-num="4">4</button>
+        <button class="num-btn" data-num="5">5</button>
+        <button class="num-btn" data-num="6">6</button>
+        <button class="num-btn" data-num="7">7</button>
+        <button class="num-btn" data-num="8">8</button>
+        <button class="num-btn" data-num="9">9</button>
+        <button class="num-btn erase" data-num="0" title="Erase">⌫</button>
+      </div>
+      <div class="action-row">
+        <button id="notesBtn" class="toggle-btn" aria-pressed="false">✏️ Notes</button>
+        <button id="hintBtn" class="toggle-btn">💡 Hint</button>
+        <button id="solveBtn" class="toggle-btn">🧠 Solve</button>
+        <button id="resetBtn" class="toggle-btn">↺ Reset Board</button>
+      </div>
+    </div>
+
+    <p class="hint-text">Click a cell or use arrow keys to move · 1–9 to fill · Backspace to clear · N toggles notes · C cycles candidate display.</p>
+  </div>
+
+  <aside id="historyPanel" class="history-panel hidden" aria-label="Puzzle history">
+    <div class="history-header">
+      <h2>History &amp; Stats</h2>
+      <button id="closeHistoryBtn" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+    <div id="overallStats" class="overall-stats"></div>
+    <div id="historyList" class="history-list"></div>
+  </aside>
+  <div id="historyBackdrop" class="backdrop hidden"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
