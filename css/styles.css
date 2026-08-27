@@ -498,6 +498,63 @@ html, body {
 .history-item-actions button.danger { color: var(--error-text); }
 .history-empty { color: var(--text-dim); font-size: 0.85rem; }
 
+/* --- Solver comparison panel (same sliding-panel shell as History) --- */
+.solver-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(380px, 92vw);
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  z-index: 21;
+  padding: 18px;
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+}
+.solver-panel.hidden { display: none; }
+
+.solver-intro {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+.solver-playbook-link {
+  display: inline-block;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  margin: 0 0 14px;
+}
+.solver-playbook-link:hover { text-decoration: underline; }
+
+.solver-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.solver-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.solver-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.solver-row-top strong { font-size: 0.88rem; }
+.solver-status { font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+.solver-status.good { color: var(--success); }
+.solver-status.bad { color: var(--error-text); }
+.solver-status.pending { color: var(--text-dim); }
+.solver-meta { color: var(--text-dim); font-size: 0.78rem; }
+.solver-meta.bad { color: var(--error-text); }
+
 @media (max-width: 420px) {
   .action-row { justify-content: center; }
   .toggle-btn { flex: 1 1 45%; }

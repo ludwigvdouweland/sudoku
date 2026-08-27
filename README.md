@@ -39,6 +39,14 @@ HTTPS.
   (`N` to toggle). Selected cell, its row/column/box, and matching values are
   all highlighted; rule violations and wrong entries are flagged in red.
 - **Hint**, **Solve**, and **Reset Board** actions.
+- **Solver comparison panel** (🧮 button) — every *new* puzzle (not
+  resume/retry, since that's the same puzzle) is automatically solved by all
+  5 solvers in the background — the app's own backtracking solver, a
+  constraint-propagation (CP) solver, a Dancing Links (Algorithm X) solver,
+  and two MILP formulations solved by HiGHS — and the panel shows each one's
+  status, run time, and whether it agrees with the known solution. See
+  [SOLVERS.md](SOLVERS.md) for how each solver works and a full
+  performance/quality comparison.
 - **History & stats panel** (📜 button) — every generated/loaded puzzle is
   saved locally with a unique ID. Resume an in-progress puzzle, replay a
   finished one, or delete old entries. Progress (board, notes, timer,
@@ -79,6 +87,18 @@ puzzle-fetch request when "Online source" is enabled.
 index.html            Page structure
 css/styles.css         Styling (light/dark themes via CSS variables)
 js/sudoku-engine.js    Pure Sudoku logic: generate, solve, validate
+js/cp-solver.js        A constraint-propagation (CP) solver -- domain filtering
+                        (naked/hidden singles) plus MRV-guided backtracking search.
+                        Powers the solver comparison panel; see SOLVERS.md for the
+                        write-up and cp-test.html for a standalone demo.
+js/dlx-solver.js       A Dancing Links (Algorithm X) exact-cover solver. Powers the
+                        solver comparison panel; see SOLVERS.md for the write-up and
+                        dlx-test.html for a standalone demo.
+js/milp-solver.js      Two MILP (mixed-integer programming) formulations of Sudoku,
+                        solved by the vendored HiGHS solver. Powers the solver
+                        comparison panel; see SOLVERS.md for the write-up and
+                        milp-test.html for a standalone demo.
+js/vendor/highs/        Vendored HiGHS solver (WebAssembly, MIT license)
 js/api.js              Optional web puzzle source (opt-in, fails gracefully)
 js/storage.js          Local history/attempts persistence (localStorage)
 js/estimate.js         Modeled solve-time distribution for the percentile estimate
