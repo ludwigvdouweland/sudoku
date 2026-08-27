@@ -76,7 +76,6 @@ const instructionsBtn = document.getElementById('instructionsBtn');
 const closeInstructionsBtn = document.getElementById('closeInstructionsBtn');
 const instructionsModal = document.getElementById('instructionsModal');
 const instructionsBackdrop = document.getElementById('instructionsBackdrop');
-const instructionsTabs = document.getElementById('instructionsTabs');
 const instructionsGrid = document.getElementById('instructionsGrid');
 const instructionsStepTitle = document.getElementById('instructionsStepTitle');
 const instructionsStepText = document.getElementById('instructionsStepText');
@@ -792,22 +791,10 @@ function renderHistoryPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Instructions ("How to play") — a 9-step walkthrough, one step per 3x3 box,
-// stepped through with tabs or Prev/Next. Runs against its own small static
-// illustration grid rather than the live board, so it never touches game state.
+// Instructions ("How to play") — a 9-step walkthrough. The step number (1-9)
+// is shown directly on the cells of a single 3x3 block; clicking a cell jumps
+// to that step, same as Prev/Next. Nothing here touches live game state.
 // ---------------------------------------------------------------------------
-
-const INSTRUCTIONS_SAMPLE = [
-  [5, 3, 4, 6, 7, 8, 9, 1, 2],
-  [6, 7, 2, 1, 9, 5, 3, 4, 8],
-  [1, 9, 8, 3, 4, 2, 5, 6, 7],
-  [8, 5, 9, 7, 6, 1, 4, 2, 3],
-  [4, 2, 6, 8, 5, 3, 7, 9, 1],
-  [7, 1, 3, 9, 2, 4, 8, 5, 6],
-  [9, 6, 1, 5, 3, 7, 2, 8, 4],
-  [2, 8, 7, 4, 1, 9, 6, 3, 5],
-  [3, 4, 5, 2, 8, 6, 1, 7, 9],
-];
 
 const INSTRUCTIONS_STEPS = [
   {
@@ -848,42 +835,29 @@ const INSTRUCTIONS_STEPS = [
   },
 ];
 
-const instructionsCellEls = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+const instructionsCellEls = Array(INSTRUCTIONS_STEPS.length).fill(null);
 let instructionsStep = 0;
 
 function buildInstructionsDom() {
   instructionsGrid.innerHTML = '';
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      const cell = document.createElement('div');
-      cell.className = 'instructions-cell';
-      cell.dataset.row = String(r);
-      cell.dataset.col = String(c);
-      cell.textContent = String(INSTRUCTIONS_SAMPLE[r][c]);
-      instructionsGrid.appendChild(cell);
-      instructionsCellEls[r][c] = cell;
-    }
-  }
-
-  instructionsTabs.innerHTML = '';
   INSTRUCTIONS_STEPS.forEach((_, i) => {
-    const tab = document.createElement('button');
-    tab.className = 'instructions-tab';
-    tab.textContent = String(i + 1);
-    tab.setAttribute('aria-label', `Step ${i + 1}`);
-    tab.addEventListener('click', () => {
+    const cell = document.createElement('button');
+    cell.className = 'instructions-cell';
+    cell.type = 'button';
+    cell.textContent = String(i + 1);
+    cell.setAttribute('aria-label', `Step ${i + 1}`);
+    cell.addEventListener('click', () => {
       sfx.click();
       showInstructionsStep(i);
     });
-    instructionsTabs.appendChild(tab);
+    instructionsGrid.appendChild(cell);
+    instructionsCellEls[i] = cell;
   });
 }
 
 function showInstructionsStep(index) {
   instructionsStep = Math.min(INSTRUCTIONS_STEPS.length - 1, Math.max(0, index));
   const step = INSTRUCTIONS_STEPS[instructionsStep];
-  const boxRow = Math.floor(instructionsStep / 3);
-  const boxCol = instructionsStep % 3;
 
   instructionsStepTitle.textContent = step.title;
   instructionsStepText.textContent = step.text;
@@ -891,16 +865,9 @@ function showInstructionsStep(index) {
   instructionsPrevBtn.disabled = instructionsStep === 0;
   instructionsNextBtn.textContent = instructionsStep === INSTRUCTIONS_STEPS.length - 1 ? 'Done' : 'Next →';
 
-  Array.from(instructionsTabs.children).forEach((tab, i) => {
-    tab.classList.toggle('active', i === instructionsStep);
+  instructionsCellEls.forEach((cell, i) => {
+    cell.classList.toggle('active', i === instructionsStep);
   });
-
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      const inBox = Math.floor(r / 3) === boxRow && Math.floor(c / 3) === boxCol;
-      instructionsCellEls[r][c].classList.toggle('box-active', inBox);
-    }
-  }
 }
 
 function openInstructions() {
