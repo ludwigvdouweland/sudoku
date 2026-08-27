@@ -1,3 +1,12 @@
+<!--
+  Manual smoke test for js/milp-solver.js -- not linked from index.html or
+  used by the app. Serve the repo (see README's "Running it" section) and
+  open this file directly, e.g. http://localhost:8000/milp-test.html, to
+  compare the backtracking solver against both MILP formulations on the
+  classic 30-clue example puzzle. See the performance caveat at the top of
+  js/milp-solver.js before expecting this to finish quickly -- the integer
+  formulation in particular can take a very long time.
+-->
 <!doctype html>
 <html>
 <head><meta charset="UTF-8" /><title>MILP solver smoke test</title></head>

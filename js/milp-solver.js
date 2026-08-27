@@ -11,6 +11,31 @@
 // as any other), so `optimize` is a dummy attribute name that no variable
 // ever references -- every variable's cost defaults to 0, and the solver
 // just has to find any point that satisfies every constraint.
+//
+// PERFORMANCE CAVEAT (read before wiring either of these into the UI):
+// both formulations were checked for mathematical correctness by porting
+// their constraint-building logic to Python and confirming a known Sudoku
+// solution satisfies every generated constraint -- that check also caught
+// a real off-by-one in the integer formulation's big-M value (see below).
+// But live in-browser runs (via Playwright/Chromium) showed this vendored
+// solver taking minutes-plus even on a *near-fully-solved* 9x9 grid (only
+// a handful of empty cells) for the binary formulation, despite that being
+// a mechanically trivial instance. Sudoku's exact-cover structure -- every
+// row/column/box/cell constraint is an equality -- is a classic pathological
+// case for plain dense-tableau simplex: assignment-style LPs are highly
+// degenerate (many tied bases), which is exactly what specialized
+// algorithms (network simplex, interior-point + presolve/cuts in solvers
+// like CPLEX/Gurobi/HiGHS) exist to handle efficiently. This library's
+// plain simplex (with Bland's-rule anti-cycling) doesn't have that
+// specialization, so it can burn its whole iteration budget on
+// degenerate pivots before ever reaching a branch. `options.timeoutMs`
+// below is honored between branch-and-bound nodes, but a single node's
+// simplex call can itself run long past that budget before the next
+// timeout check is reached -- so treat the timeout as a soft, not hard,
+// bound. Net: these are correct, working reference implementations of
+// the two formulations, useful for comparing them or trying a faster
+// solver backend later -- not a practical drop-in replacement for
+// solveGrid in the app's Solve button today.
 
 import { SIZE, BOX, emptyGrid } from './sudoku-engine.js';
 import solver from './vendor/lp-solver.js';
@@ -40,9 +65,12 @@ function extractGridOrNull(result, cellValue) {
 //   x[r][c][g] = 1                           fixed for every given clue g
 //
 // This is the standard "exact cover" ILP formulation -- the same one that
-// backs algorithms like Knuth's Dancing Links. Its LP relaxation tends to
-// already be near-integral for solvable Sudoku grids, so branch-and-bound
-// usually needs very little branching in practice.
+// backs algorithms like Knuth's Dancing Links, and the one industrial MILP
+// solvers (Gurobi, CPLEX, HiGHS) solve in milliseconds thanks to
+// presolve, cutting planes, and degeneracy-aware pivoting. See the
+// PERFORMANCE CAVEAT above, though: this specific vendored solver lacks
+// that specialization, so don't assume "standard formulation" implies
+// "fast here".
 // ---------------------------------------------------------------------------
 
 export function solveGridMILPBinary(grid, options = {}) {
