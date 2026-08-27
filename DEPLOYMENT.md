@@ -24,11 +24,13 @@ This app is published on the web via **GitHub Pages**.
 
 ## Updating the live site
 
-From this folder:
+Day-to-day work happens on `develop` and `feature/*` branches, not directly
+on `master` — see [BRANCHING.md](BRANCHING.md) for the full model. Once a
+change has been tested locally on `develop`:
 
 ```powershell
-git add -A
-git commit -m "describe the change"
+git checkout master
+git merge develop
 git push
 ```
 
