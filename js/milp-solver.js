@@ -1,31 +1,52 @@
 // milp-solver.js
-// Two MILP formulations of Sudoku, both solved with the vendored
-// `javascript-lp-solver` branch-and-bound/simplex engine (see
-// ./vendor/lp-solver.js). These are alternatives to the hand-written MRV
-// backtracking solver in sudoku-engine.js (solveGrid) -- same job (given a
-// 9x9 grid with 0 = empty, return a solved grid, or null if infeasible /
-// the solver couldn't finish in time), different technique. Pure logic, no
-// DOM access.
+// Two MILP formulations of Sudoku, both solved by HiGHS
+// (https://highs.dev, vendored as ./vendor/highs/ -- see that file for
+// details) compiled to WebAssembly. These are alternatives to the
+// hand-written MRV backtracking solver in sudoku-engine.js (solveGrid) --
+// same job (given a 9x9 grid with 0 = empty, return a solved grid, or null
+// if infeasible), different technique. Pure logic, no DOM access.
 //
 // Both formulations are pure feasibility problems (any solution is as good
-// as any other), so `optimize` is a dummy attribute name that no variable
-// ever references -- every variable's cost defaults to 0, and the solver
-// just has to find any point that satisfies every constraint.
+// as any other), so the objective is just the constant `0`. HiGHS is a
+// real industrial-grade solver (presolve, cutting planes, a proper
+// branch-and-cut implementation) written in C++, unlike the pure-JS solver
+// this module used previously (see git history) -- that alone took the
+// binary formulation from minutes-plus (often not finishing) to a flat
+// ~15-20ms regardless of difficulty. The integer formulation (see its own
+// notes below) is usually fast too but has real variance -- it's occasionally
+// slow (seconds) on hard puzzles. Full numbers in SOLVERS.md.
+//
+// HiGHS's JS API takes the model as CPLEX .lp format text (not JSON), and
+// loading the WASM module (~3.4MB, see ./vendor/highs/highs.wasm) is
+// asynchronous, so both exported functions here are async (solveGrid, by
+// contrast, is synchronous). The module is fetched once and cached for the
+// page's lifetime (see getHighs() below), so only the first call pays the
+// load cost.
 
 import { SIZE, BOX, emptyGrid } from './sudoku-engine.js';
-import solver from './vendor/lp-solver.js';
+import highsLoader from './vendor/highs/highs.js';
 
-const DEFAULT_TIMEOUT_MS = 20000;
-
-function extractGridOrNull(result, cellValue) {
-  if (!result || !result.feasible || !result.isIntegral) return null;
-  const out = emptyGrid();
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      out[r][c] = cellValue(result, r, c);
-    }
+// The WASM module is loaded once and reused across calls.
+let highsPromise = null;
+function getHighs() {
+  if (!highsPromise) {
+    highsPromise = highsLoader({
+      locateFile: (file) => new URL(`./vendor/highs/${file}`, import.meta.url).href,
+    });
   }
-  return out;
+  return highsPromise;
+}
+
+const DEFAULT_TIME_LIMIT_S = 10;
+
+// Runs a CPLEX-LP-format model through HiGHS and returns its raw solution
+// object, or null if it wasn't solved to optimality (infeasible, timed out,
+// etc. -- for our pure feasibility models "optimal" just means "found a
+// point satisfying every constraint").
+async function solveLP(lpText, options = {}) {
+  const highs = await getHighs();
+  const result = highs.solve(lpText, { time_limit: options.timeLimitS || DEFAULT_TIME_LIMIT_S });
+  return result.Status === 'Optimal' ? result : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,71 +61,78 @@ function extractGridOrNull(result, cellValue) {
 //   x[r][c][g] = 1                           fixed for every given clue g
 //
 // This is the standard "exact cover" ILP formulation -- the same one that
-// backs algorithms like Knuth's Dancing Links. Its LP relaxation tends to
-// already be near-integral for solvable Sudoku grids, so branch-and-bound
-// usually needs very little branching in practice.
+// backs algorithms like Knuth's Dancing Links, and the one industrial MILP
+// solvers solve essentially instantly thanks to presolve, cuts, and
+// degeneracy-aware pivoting (which is exactly what HiGHS brings here).
 // ---------------------------------------------------------------------------
 
-export function solveGridMILPBinary(grid, options = {}) {
-  const variables = {};
-  const constraints = {};
-  const binaries = {};
+export async function solveGridMILPBinary(grid, options = {}) {
+  const xVar = (r, c, v) => `x_${r}_${c}_${v}`;
 
-  const cellC = (r, c) => `cell_${r}_${c}`;
-  const rowC = (r, v) => `row_${r}_${v}`;
-  const colC = (c, v) => `col_${c}_${v}`;
-  const boxC = (br, bc, v) => `box_${br}_${bc}_${v}`;
-  const givenC = (r, c) => `given_${r}_${c}`;
-
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) constraints[cellC(r, c)] = { equal: 1 };
-  }
-  for (let v = 1; v <= 9; v++) {
-    for (let r = 0; r < SIZE; r++) constraints[rowC(r, v)] = { equal: 1 };
-    for (let c = 0; c < SIZE; c++) constraints[colC(c, v)] = { equal: 1 };
-    for (let br = 0; br < SIZE; br += BOX) {
-      for (let bc = 0; bc < SIZE; bc += BOX) constraints[boxC(br, bc, v)] = { equal: 1 };
-    }
-  }
+  const lines = ['Minimize', ' obj: 0', 'Subject To'];
 
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
-      const br = r - (r % BOX);
-      const bc = c - (c % BOX);
-      for (let v = 1; v <= 9; v++) {
-        const id = `x_${r}_${c}_${v}`;
-        binaries[id] = 1;
-        variables[id] = {
-          [cellC(r, c)]: 1,
-          [rowC(r, v)]: 1,
-          [colC(c, v)]: 1,
-          [boxC(br, bc, v)]: 1,
-        };
-      }
-      const given = grid[r][c];
-      if (given) {
-        constraints[givenC(r, c)] = { equal: 1 };
-        variables[`x_${r}_${c}_${given}`][givenC(r, c)] = 1;
+      const terms = [];
+      for (let v = 1; v <= 9; v++) terms.push(xVar(r, c, v));
+      lines.push(` cell_${r}_${c}: ${terms.join(' + ')} = 1`);
+    }
+  }
+  for (let v = 1; v <= 9; v++) {
+    for (let r = 0; r < SIZE; r++) {
+      const terms = [];
+      for (let c = 0; c < SIZE; c++) terms.push(xVar(r, c, v));
+      lines.push(` row_${r}_${v}: ${terms.join(' + ')} = 1`);
+    }
+    for (let c = 0; c < SIZE; c++) {
+      const terms = [];
+      for (let r = 0; r < SIZE; r++) terms.push(xVar(r, c, v));
+      lines.push(` col_${c}_${v}: ${terms.join(' + ')} = 1`);
+    }
+    for (let br = 0; br < SIZE; br += BOX) {
+      for (let bc = 0; bc < SIZE; bc += BOX) {
+        const terms = [];
+        for (let r = br; r < br + BOX; r++) {
+          for (let c = bc; c < bc + BOX; c++) terms.push(xVar(r, c, v));
+        }
+        lines.push(` box_${br}_${bc}_${v}: ${terms.join(' + ')} = 1`);
       }
     }
   }
 
-  const model = {
-    optimize: 'feasibility',
-    opType: 'min',
-    constraints,
-    variables,
-    binaries,
-    options: { timeout: options.timeoutMs || DEFAULT_TIMEOUT_MS },
-  };
-
-  const result = solver.Solve(model);
-  return extractGridOrNull(result, (res, r, c) => {
-    for (let v = 1; v <= 9; v++) {
-      if (Math.round(res[`x_${r}_${c}_${v}`] || 0) === 1) return v;
+  // Fix every given clue directly in Bounds below rather than adding more
+  // constraint rows -- `x = 1` there pins the variable exactly.
+  const fixedBounds = [];
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const given = grid[r][c];
+      if (given) fixedBounds.push(` ${xVar(r, c, given)} = 1`);
     }
-    return 0;
-  });
+  }
+
+  lines.push('Bounds', ...fixedBounds, 'Binaries');
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      for (let v = 1; v <= 9; v++) lines.push(` ${xVar(r, c, v)}`);
+    }
+  }
+  lines.push('End');
+
+  const result = await solveLP(lines.join('\n'), options);
+  if (!result) return null;
+
+  const out = emptyGrid();
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      for (let v = 1; v <= 9; v++) {
+        if (Math.round(result.Columns[xVar(r, c, v)].Primal) === 1) {
+          out[r][c] = v;
+          break;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,20 +157,28 @@ export function solveGridMILPBinary(grid, options = {}) {
 // way y_i != y_j. M must be large enough that the "slack" side can never
 // be violated by real values: the widest possible gap is 9 - 1 = 8, so
 // M = 9 is the smallest safe choice (1 - M = -8 exactly matches the
-// worst case y_j - y_i = 1 - 9 = -8, so the inequality still holds, not violated).
+// worst case y_j - y_i = 1 - 9 = -8, so the inequality still holds, not
+// violated -- this off-by-one was caught by independently re-checking the
+// constraint math against a known solution before this module existed).
 //
 // Pairs are deduplicated across row/column/box (a pair of cells in the same
 // row *and* the same box would otherwise get two redundant copies of the
 // same disjunction), leaving ~810 pairs -> ~810 auxiliary binaries and
-// ~1620 extra constraints.
+// ~1620 extra constraints -- and pairs where both cells are already given
+// are skipped entirely, since two fixed, distinct values need no
+// disjunction to keep them apart.
 //
 // Net trade-off vs. the binary formulation above: 81 integer variables
-// instead of 729 binaries, but ~810 auxiliary binaries and a *much* looser
-// LP relaxation (big-M constraints are notoriously weak), so branch-and-
-// bound typically explores far more nodes and this solver runs noticeably
-// slower. It's included to show that trade-off, not because it's the
-// better formulation -- the exact-cover assignment model is the one you'd
-// actually want in practice.
+// instead of 729 binaries, but up to ~810 auxiliary binaries and a *much*
+// looser LP relaxation (big-M constraints are notoriously weak). That shows
+// up in practice: across 5 runs per difficulty, this formulation averaged
+// ~45ms (easy) to ~115ms (normal) to ~1.1s (hard) -- and hard puzzles (fewer
+// givens -> more free-cell pairs -> more auxiliary binaries) occasionally
+// spike hard, one run took 5.1s. The binary formulation above stayed a flat
+// ~15-20ms regardless of difficulty. Kept here to demonstrate the
+// formulation and that trade-off concretely, not as a recommendation --
+// prefer solveGridMILPBinary if you actually need a fast MILP solve. See
+// SOLVERS.md for the full comparison and the numbers behind this.
 // ---------------------------------------------------------------------------
 
 function sudokuUnits() {
@@ -190,67 +226,56 @@ function allDifferentPairs() {
   return pairs;
 }
 
-export function solveGridMILPInteger(grid, options = {}) {
+export async function solveGridMILPInteger(grid, options = {}) {
   const M = 9; // smallest safe big-M for a [1,9] domain -- see note above
-  const variables = {};
-  const constraints = {};
-  const ints = {};
-  const binaries = {};
+  const yVar = (r, c) => `y_${r}_${c}`;
 
-  const cellVar = (r, c) => `y_${r}_${c}`;
-  const boundC = (r, c) => `bound_${r}_${c}`;
-
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      const id = cellVar(r, c);
-      ints[id] = 1;
-      variables[id] = {};
-      const given = grid[r][c];
-      constraints[boundC(r, c)] = given ? { equal: given } : { min: 1, max: 9 };
-      variables[id][boundC(r, c)] = 1;
-    }
-  }
+  const lines = ['Minimize', ' obj: 0', 'Subject To'];
+  const binaryVars = [];
 
   allDifferentPairs().forEach(([[r1, c1], [r2, c2]], idx) => {
     // Both cells are already fixed by the puzzle's givens -- they're
     // guaranteed different by construction, so the disjunction has nothing
-    // left to decide. Skipping these keeps the model's size proportional to
-    // how many cells are still unsolved instead of always paying for all
-    // ~810 pairs regardless of how few cells are actually free.
+    // left to decide.
     if (grid[r1][c1] && grid[r2][c2]) return;
 
-    const yi = cellVar(r1, c1);
-    const yj = cellVar(r2, c2);
+    const yi = yVar(r1, c1);
+    const yj = yVar(r2, c2);
     const b = `b_${idx}`;
-    binaries[b] = 1;
-    variables[b] = {};
-
-    const nameA = `diff_${idx}_a`;
-    const nameB = `diff_${idx}_b`;
-    constraints[nameA] = { min: 1 };
-    constraints[nameB] = { min: 1 - M };
+    binaryVars.push(b);
 
     // (A): y_i - y_j + M*b >= 1
-    variables[yi][nameA] = 1;
-    variables[yj][nameA] = -1;
-    variables[b][nameA] = M;
-
+    lines.push(` diff_${idx}_a: ${yi} - ${yj} + ${M} ${b} >= 1`);
     // (B): y_j - y_i - M*b >= 1 - M   (i.e. + M*(1-b) >= 1)
-    variables[yi][nameB] = -1;
-    variables[yj][nameB] = 1;
-    variables[b][nameB] = -M;
+    lines.push(` diff_${idx}_b: ${yj} - ${yi} - ${M} ${b} >= ${1 - M}`);
   });
 
-  const model = {
-    optimize: 'feasibility',
-    opType: 'min',
-    constraints,
-    variables,
-    ints,
-    binaries,
-    options: { timeout: options.timeoutMs || DEFAULT_TIMEOUT_MS },
-  };
+  lines.push('Bounds');
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const given = grid[r][c];
+      lines.push(given ? ` ${yVar(r, c)} = ${given}` : ` 1 <= ${yVar(r, c)} <= 9`);
+    }
+  }
 
-  const result = solver.Solve(model);
-  return extractGridOrNull(result, (res, r, c) => Math.round(res[cellVar(r, c)] || 0));
+  lines.push('Generals');
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) lines.push(` ${yVar(r, c)}`);
+  }
+
+  if (binaryVars.length) {
+    lines.push('Binaries', ...binaryVars.map((b) => ` ${b}`));
+  }
+  lines.push('End');
+
+  const result = await solveLP(lines.join('\n'), options);
+  if (!result) return null;
+
+  const out = emptyGrid();
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      out[r][c] = Math.round(result.Columns[yVar(r, c)].Primal);
+    }
+  }
+  return out;
 }

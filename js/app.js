@@ -1,6 +1,9 @@
 // app.js — UI wiring. Entry point loaded as a module from index.html.
 
 import { SIZE, cloneGrid, solveGrid, generatePuzzle, findConflicts, gridsEqual, computeCandidates } from './sudoku-engine.js';
+import { solveGridMILPBinary, solveGridMILPInteger } from './milp-solver.js';
+import { solveGridCP } from './cp-solver.js';
+import { solveGridDLX } from './dlx-solver.js';
 import { fetchPuzzleFromWeb } from './api.js';
 import * as store from './storage.js';
 import { estimatePerformance } from './estimate.js';
@@ -61,8 +64,24 @@ const historyPanel = document.getElementById('historyPanel');
 const historyBackdrop = document.getElementById('historyBackdrop');
 const historyList = document.getElementById('historyList');
 const overallStats = document.getElementById('overallStats');
+const solverBtn = document.getElementById('solverBtn');
+const closeSolverBtn = document.getElementById('closeSolverBtn');
+const solverPanel = document.getElementById('solverPanel');
+const solverBackdrop = document.getElementById('solverBackdrop');
+const solverMeta = document.getElementById('solverMeta');
+const solverList = document.getElementById('solverList');
 const diffButtons = Array.from(document.querySelectorAll('.diff-btn'));
 const candButtons = Array.from(document.querySelectorAll('.cand-btn'));
+const instructionsBtn = document.getElementById('instructionsBtn');
+const closeInstructionsBtn = document.getElementById('closeInstructionsBtn');
+const instructionsModal = document.getElementById('instructionsModal');
+const instructionsBackdrop = document.getElementById('instructionsBackdrop');
+const instructionsGrid = document.getElementById('instructionsGrid');
+const instructionsStepTitle = document.getElementById('instructionsStepTitle');
+const instructionsStepText = document.getElementById('instructionsStepText');
+const instructionsProgress = document.getElementById('instructionsProgress');
+const instructionsPrevBtn = document.getElementById('instructionsPrevBtn');
+const instructionsNextBtn = document.getElementById('instructionsNextBtn');
 
 const cellEls = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
 
@@ -186,6 +205,7 @@ async function startNewGame(difficulty, { online }) {
   }
 
   const clues = puzzle.flat().filter((v) => v !== 0).length;
+  runSolverComparison(puzzle, solution, { difficulty, clues }); // background, not awaited
   const game = store.createGameRecord({ puzzle, solution, difficulty, source, clues });
   const attempt = store.startAttempt(game.id);
 
@@ -220,6 +240,188 @@ function applyGame(game, attempt) {
   render();
   if (!state.solved) startTimer();
   else stopTimer();
+}
+
+// ---------------------------------------------------------------------------
+// Solver comparison
+//
+// Runs all 5 solvers (backtracking, the CP solver from cp-solver.js, the DLX
+// solver from dlx-solver.js, and the two MILP formulations from
+// milp-solver.js) against every newly generated/fetched puzzle and times +
+// cross-checks them. Deliberately NOT triggered by retry/resume — those
+// reload the *same* puzzle, so there'd be nothing new to compare. Ephemeral,
+// module-level state (not persisted, not part of `state`/storage.js) — it
+// exists purely to feed the Solver Comparison panel and is lost on refresh
+// like any other in-memory UI state.
+// ---------------------------------------------------------------------------
+
+const SOLVERS = [
+  { key: 'backtracking', label: 'Backtracking (MRV)' },
+  { key: 'cp', label: 'Constraint Propagation (CP)' },
+  { key: 'dlx', label: 'Dancing Links (Algorithm X)' },
+  { key: 'milpBinary', label: 'MILP — binary assignment (HiGHS)' },
+  { key: 'milpInteger', label: 'MILP — integer cells (HiGHS)' },
+];
+
+let solverRun = null; // { meta: {difficulty, clues}, results: { [key]: {status, ms, matches, errorMessage} } }
+
+/** Runs all 5 solvers against `puzzle`, timing each and checking the result
+ *  against `solution` (the puzzle's known-correct solution — from the
+ *  generator, which verifies uniqueness itself, or from solveGrid on a
+ *  fetched puzzle). Fire-and-forget: doesn't block the board. */
+async function runSolverComparison(puzzle, solution, meta) {
+  const run = {
+    meta,
+    results: {
+      backtracking: { status: 'pending' },
+      cp: { status: 'pending' },
+      dlx: { status: 'pending' },
+      milpBinary: { status: 'pending' },
+      milpInteger: { status: 'pending' },
+    },
+  };
+  solverRun = run;
+  renderSolverPanel();
+
+  // Guards against a race: if a *newer* puzzle's comparison has already
+  // started (and replaced solverRun) by the time an older run's async
+  // solver resolves, drop that stale result instead of corrupting the
+  // newer run's row.
+  const setResult = (key, patch) => {
+    if (solverRun !== run) return;
+    run.results[key] = { ...run.results[key], ...patch };
+    renderSolverPanel();
+  };
+
+  // Backtracking (sudoku-engine.js solveGrid) is synchronous.
+  {
+    const t0 = performance.now();
+    try {
+      const result = solveGrid(cloneGrid(puzzle));
+      setResult('backtracking', {
+        status: result ? 'solved' : 'infeasible',
+        ms: performance.now() - t0,
+        matches: result ? gridsEqual(result, solution) : null,
+      });
+    } catch (err) {
+      console.error('Backtracking solver comparison failed:', err);
+      setResult('backtracking', { status: 'error', ms: performance.now() - t0, errorMessage: String(err?.message || err) });
+    }
+  }
+
+  // Constraint Propagation (cp-solver.js) is also pure JS/synchronous, no
+  // WASM to await, same as backtracking above.
+  {
+    const t0 = performance.now();
+    try {
+      const result = solveGridCP(cloneGrid(puzzle));
+      setResult('cp', {
+        status: result ? 'solved' : 'infeasible',
+        ms: performance.now() - t0,
+        matches: result ? gridsEqual(result, solution) : null,
+      });
+    } catch (err) {
+      console.error('CP solver comparison failed:', err);
+      setResult('cp', { status: 'error', ms: performance.now() - t0, errorMessage: String(err?.message || err) });
+    }
+  }
+
+  // Dancing Links (dlx-solver.js) is also pure JS/synchronous.
+  {
+    const t0 = performance.now();
+    try {
+      const result = solveGridDLX(cloneGrid(puzzle));
+      setResult('dlx', {
+        status: result ? 'solved' : 'infeasible',
+        ms: performance.now() - t0,
+        matches: result ? gridsEqual(result, solution) : null,
+      });
+    } catch (err) {
+      console.error('DLX solver comparison failed:', err);
+      setResult('dlx', { status: 'error', ms: performance.now() - t0, errorMessage: String(err?.message || err) });
+    }
+  }
+
+  // The two MILP solvers (HiGHS) run concurrently in the background --
+  // neither blocks the board, each other, or the backtracking result above.
+  const runMilp = async (key, solverFn) => {
+    const t0 = performance.now();
+    try {
+      const result = await solverFn(cloneGrid(puzzle));
+      setResult(key, {
+        status: result ? 'solved' : 'infeasible',
+        ms: performance.now() - t0,
+        matches: result ? gridsEqual(result, solution) : null,
+      });
+    } catch (err) {
+      console.error(`${key} solver comparison failed:`, err);
+      setResult(key, { status: 'error', ms: performance.now() - t0, errorMessage: String(err?.message || err) });
+    }
+  };
+  runMilp('milpBinary', solveGridMILPBinary);
+  runMilp('milpInteger', solveGridMILPInteger);
+}
+
+function solverStatusLabel(status) {
+  switch (status) {
+    case 'pending': return 'Running…';
+    case 'solved': return 'Solved';
+    case 'infeasible': return 'Infeasible';
+    case 'error': return 'Error';
+    default: return '—';
+  }
+}
+function solverStatusTone(status) {
+  if (status === 'solved') return 'good';
+  if (status === 'infeasible' || status === 'error') return 'bad';
+  return 'pending';
+}
+
+function renderSolverPanel() {
+  if (!solverRun) {
+    solverMeta.innerHTML = '';
+    solverList.innerHTML = '<p class="history-empty">No comparison yet — start a New Game.</p>';
+    return;
+  }
+
+  const { meta, results } = solverRun;
+  solverMeta.innerHTML = `
+    <span class="tag">${meta.difficulty}</span>
+    <span class="tag">${meta.clues} clues</span>
+  `;
+
+  solverList.innerHTML = '';
+  for (const { key, label } of SOLVERS) {
+    const r = results[key] || { status: 'pending' };
+    const matchNote = r.matches === true ? ' · matches solution ✓'
+      : r.matches === false ? ' · MISMATCH ✗' : '';
+    const metaLine = [
+      r.ms != null ? `${Math.round(r.ms)} ms` : '—',
+      matchNote,
+      r.errorMessage ? ` · ${r.errorMessage}` : '',
+    ].join('');
+
+    const row = document.createElement('div');
+    row.className = 'solver-row';
+    row.innerHTML = `
+      <div class="solver-row-top">
+        <strong>${label}</strong>
+        <span class="solver-status ${solverStatusTone(r.status)}">${solverStatusLabel(r.status)}</span>
+      </div>
+      <div class="solver-meta${r.matches === false ? ' bad' : ''}">${metaLine}</div>
+    `;
+    solverList.appendChild(row);
+  }
+}
+
+function openSolverPanel() {
+  renderSolverPanel();
+  solverPanel.classList.remove('hidden');
+  solverBackdrop.classList.remove('hidden');
+}
+function closeSolverPanel() {
+  solverPanel.classList.add('hidden');
+  solverBackdrop.classList.add('hidden');
 }
 
 function retryCurrentPuzzle() {
@@ -589,6 +791,117 @@ function renderHistoryPanel() {
 }
 
 // ---------------------------------------------------------------------------
+// Instructions ("How to play") — a 9-step walkthrough. The step number (1-9)
+// is shown directly on the cells of a single 3x3 block; clicking a cell jumps
+// to that step, same as Prev/Next. Nothing here touches live game state.
+// ---------------------------------------------------------------------------
+
+const INSTRUCTIONS_STEPS = [
+  {
+    title: 'The goal',
+    text: "Fill every row, column, and 3×3 box with the digits 1–9 — no repeats. Bold numbers are the puzzle's givens and can't be changed.",
+  },
+  {
+    title: 'Pick a cell',
+    text: 'Click any empty cell, or move around with the arrow keys, to select it. The selected cell gets a highlighted border.',
+  },
+  {
+    title: 'Enter a number',
+    text: 'With a cell selected, tap 1–9 on the number pad (or your keyboard) to fill it. Backspace, Delete, 0, or ⌫ clears it.',
+  },
+  {
+    title: 'See your peers',
+    text: "Selecting a cell lights up its row, column, and box — its \"peers\" — plus every other cell holding the same number, so conflicts jump out.",
+  },
+  {
+    title: 'Mistakes are tracked',
+    text: "An entry that doesn't match the solution turns red and adds to your Mistakes counter — but the game keeps going, so you can fix it and carry on.",
+  },
+  {
+    title: 'Pencil in notes',
+    text: 'Toggle ✏️ Notes (or press N) to jot small candidate numbers in a cell instead of committing to one — handy while narrowing things down.',
+  },
+  {
+    title: 'Auto candidates',
+    text: 'The Candidates row can show every legal number for a cell automatically — for the selected cell, all cells, or just the cells with the fewest options left.',
+  },
+  {
+    title: 'Hint & Solve',
+    text: '💡 Hint fills in the selected cell for you. 🧠 Solve completes the whole board instantly if you want to see the answer.',
+  },
+  {
+    title: 'Track your progress',
+    text: 'Pick a difficulty, hit New Game any time, and check 📜 History for your stats and best times. Good luck!',
+  },
+];
+
+const instructionsCellEls = Array(INSTRUCTIONS_STEPS.length).fill(null);
+let instructionsStep = 0;
+
+function buildInstructionsDom() {
+  instructionsGrid.innerHTML = '';
+  INSTRUCTIONS_STEPS.forEach((_, i) => {
+    const cell = document.createElement('button');
+    cell.className = 'instructions-cell';
+    cell.type = 'button';
+    cell.textContent = String(i + 1);
+    cell.setAttribute('aria-label', `Step ${i + 1}`);
+    cell.addEventListener('click', () => {
+      sfx.click();
+      showInstructionsStep(i);
+    });
+    instructionsGrid.appendChild(cell);
+    instructionsCellEls[i] = cell;
+  });
+}
+
+function showInstructionsStep(index) {
+  instructionsStep = Math.min(INSTRUCTIONS_STEPS.length - 1, Math.max(0, index));
+  const step = INSTRUCTIONS_STEPS[instructionsStep];
+
+  instructionsStepTitle.textContent = step.title;
+  instructionsStepText.textContent = step.text;
+  instructionsProgress.textContent = `${instructionsStep + 1} / ${INSTRUCTIONS_STEPS.length}`;
+  instructionsPrevBtn.disabled = instructionsStep === 0;
+  instructionsNextBtn.textContent = instructionsStep === INSTRUCTIONS_STEPS.length - 1 ? 'Done' : 'Next →';
+
+  instructionsCellEls.forEach((cell, i) => {
+    cell.classList.toggle('active', i === instructionsStep);
+  });
+}
+
+function openInstructions() {
+  showInstructionsStep(0);
+  instructionsModal.classList.remove('hidden');
+  instructionsBackdrop.classList.remove('hidden');
+}
+function closeInstructions() {
+  instructionsModal.classList.add('hidden');
+  instructionsBackdrop.classList.add('hidden');
+}
+
+buildInstructionsDom();
+
+instructionsBtn.addEventListener('click', () => {
+  sfx.click();
+  openInstructions();
+});
+closeInstructionsBtn.addEventListener('click', () => {
+  sfx.click();
+  closeInstructions();
+});
+instructionsBackdrop.addEventListener('click', closeInstructions);
+instructionsPrevBtn.addEventListener('click', () => {
+  sfx.click();
+  showInstructionsStep(instructionsStep - 1);
+});
+instructionsNextBtn.addEventListener('click', () => {
+  sfx.click();
+  if (instructionsStep === INSTRUCTIONS_STEPS.length - 1) closeInstructions();
+  else showInstructionsStep(instructionsStep + 1);
+});
+
+// ---------------------------------------------------------------------------
 // Theme
 // ---------------------------------------------------------------------------
 
@@ -705,10 +1018,29 @@ closeHistoryBtn.addEventListener('click', () => {
   closeHistoryPanel();
 });
 historyBackdrop.addEventListener('click', closeHistoryPanel);
+solverBtn.addEventListener('click', () => {
+  sfx.click();
+  openSolverPanel();
+});
+closeSolverBtn.addEventListener('click', () => {
+  sfx.click();
+  closeSolverPanel();
+});
+solverBackdrop.addEventListener('click', closeSolverPanel);
 
 document.addEventListener('keydown', (e) => {
+  if (!instructionsModal.classList.contains('hidden')) {
+    if (e.key === 'Escape') closeInstructions();
+    else if (e.key === 'ArrowRight') showInstructionsStep(instructionsStep + 1);
+    else if (e.key === 'ArrowLeft') showInstructionsStep(instructionsStep - 1);
+    return;
+  }
   if (!historyPanel.classList.contains('hidden') && e.key === 'Escape') {
     closeHistoryPanel();
+    return;
+  }
+  if (!solverPanel.classList.contains('hidden') && e.key === 'Escape') {
+    closeSolverPanel();
     return;
   }
   if (e.key >= '1' && e.key <= '9') {
