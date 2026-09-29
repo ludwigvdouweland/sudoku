@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Killer Sudoku</title>
+<link rel="icon" type="image/png" href="LogoSquare.png" />
+<link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/killer.css" />
+</head>
+<body>
+  <div class="app killer-app">
+    <header class="topbar">
+      <h1><img class="brand-logo" src="LogoSquare.png" alt="The Logic Factory logo" />Killer Sudoku</h1>
+      <div class="topbar-actions">
+        <a class="icon-btn" href="index.html" title="Classic Sudoku" aria-label="Back to classic Sudoku">🏠</a>
+        <button id="soundToggle" class="icon-btn" title="Toggle sound effects" aria-label="Toggle sound effects">🔊</button>
+        <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+      </div>
+    </header>
+
+    <details class="rules-card" open>
+      <summary>Rules</summary>
+      <ul>
+        <li>Each row, column, <strong>both main diagonals</strong> and each <strong>region</strong> (outlined by the thick lines) contains the digits 1–9 exactly once.</li>
+        <li>The dashed <strong>cages</strong> must add up to the small number in their corner.</li>
+        <li>Digits may not repeat within a cage.</li>
+      </ul>
+    </details>
+
+    <div class="killer-layout">
+      <div class="killer-play">
+        <div class="status-bar">
+          <span id="filledTag" class="tag">Filled: 0 / 81</span>
+          <span id="conflictTag" class="tag">No conflicts</span>
+        </div>
+
+        <main class="board-wrap">
+          <div id="board" class="board kboard" role="grid" aria-label="Killer Sudoku board"></div>
+          <svg id="boardLines" class="kboard-lines" viewBox="0 0 900 900" aria-hidden="true"></svg>
+
+          <div id="winOverlay" class="overlay hidden">
+            <div class="win-card">
+              <h2>🎉 Solved!</h2>
+              <p class="win-footnote">Every row, column, diagonal, region and cage checks out.</p>
+              <div class="win-actions">
+                <button id="closeWinBtn" class="secondary-btn">Close</button>
+                <button id="winResetBtn" class="primary-btn">Start over</button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <div class="candidates-row">
+          <span class="candidates-label">Candidates</span>
+          <div class="candidate-select" role="group" aria-label="Candidate display mode">
+            <button class="cand-btn active" data-mode="off">Off</button>
+            <button class="cand-btn" data-mode="selected">Selected cell</button>
+            <button class="cand-btn" data-mode="all">All cells</button>
+            <button class="cand-btn" data-mode="fewest">Fewest options</button>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="numpad" id="numpad">
+            <button class="num-btn" data-num="1">1</button>
+            <button class="num-btn" data-num="2">2</button>
+            <button class="num-btn" data-num="3">3</button>
+            <button class="num-btn" data-num="4">4</button>
+            <button class="num-btn" data-num="5">5</button>
+            <button class="num-btn" data-num="6">6</button>
+            <button class="num-btn" data-num="7">7</button>
+            <button class="num-btn" data-num="8">8</button>
+            <button class="num-btn" data-num="9">9</button>
+            <button class="num-btn erase" data-num="0" title="Erase">⌫</button>
+          </div>
+          <div class="action-row">
+            <button id="notesBtn" class="toggle-btn" aria-pressed="false">✏️ Notes</button>
+            <button id="undoBtn" class="toggle-btn">↶ Undo</button>
+            <button id="resetBtn" class="toggle-btn">↺ Reset Board</button>
+          </div>
+        </div>
+
+        <p class="hint-text">Click a cell or use arrow keys · 1–9 to fill · Backspace to clear · N toggles notes · C cycles candidates · Ctrl+Z undoes.</p>
+      </div>
+
+      <aside class="analysis" aria-label="Decision support">
+        <h2>🔎 Analysis</h2>
+        <div id="analysisBody" class="analysis-body"></div>
+      </aside>
+    </div>
+  </div>
+
+<script type="module" src="js/killer-app.js"></script>
+</body>
+</html>
