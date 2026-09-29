@@ -47,6 +47,18 @@ HTTPS.
   status, run time, and whether it agrees with the known solution. See
   [SOLVERS.md](SOLVERS.md) for how each solver works and a full
   performance/quality comparison.
+- **Killer Sudoku page** (🔪 button, `killer.html`) — one fixed puzzle
+  (transcribed from a puzzle book) to solve by hand. It's a variant: on top
+  of the Killer cages, both main diagonals must hold 1–9 and the "boxes" are
+  irregular jigsaw regions. Decision support only — no solver, no solution
+  in the page: rule-based candidates (row/column/region/diagonal/cage,
+  including cage-sum reachability), each cage's digit combinations with the
+  ruled-out ones struck through, naked/hidden singles, optional
+  eliminations (digits a cage must contain, naked pairs/triples, locked
+  candidates — one step at a time or repeated until stable, each with its
+  reason), rule-of-45 hints per
+  unit, and conflict flags (repeats and cage sums that can't work). Notes,
+  undo, and Reset Board; progress is kept in `localStorage`.
 - **History & stats panel** (📜 button) — every generated/loaded puzzle is
   saved locally with a unique ID. Resume an in-progress puzzle, replay a
   finished one, or delete old entries. Progress (board, notes, timer,
@@ -103,6 +115,11 @@ js/api.js              Optional web puzzle source (opt-in, fails gracefully)
 js/storage.js          Local history/attempts persistence (localStorage)
 js/estimate.js         Modeled solve-time distribution for the percentile estimate
 js/app.js              UI wiring / event handling — the entry point
+killer.html            Killer Sudoku page (single puzzle, manual solving)
+css/killer.css         Killer page styling on top of styles.css
+js/killer-puzzle.js    The Killer puzzle: jigsaw regions + cages
+js/killer-logic.js     Killer rule logic: candidates, cage combinations, conflicts
+js/killer-app.js       Killer page UI wiring — its entry point
 ```
 
 ## Keyboard shortcuts

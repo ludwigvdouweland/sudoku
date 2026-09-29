@@ -1,0 +1,175 @@
+/* killer.css — Killer Sudoku page (killer.html). Builds on styles.css: same
+   color tokens, buttons and cell states; only the board line work, cage
+   labels, and the decision-support panel are new here. */
+
+:root {
+  --cage-line: #6d7a96;
+  --diag-line: rgba(13, 125, 156, 0.28);
+}
+/* Dark mode follows styles.css: explicit data-theme only. */
+:root[data-theme='dark'] {
+  --cage-line: #8d9cc0;
+  --diag-line: rgba(79, 216, 207, 0.22);
+}
+
+.app.killer-app { max-width: 1080px; }
+
+.killer-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.killer-play {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+  align-self: center;
+}
+.killer-play .board-wrap { max-width: 540px; }
+@media (min-width: 960px) {
+  .killer-layout { flex-direction: row; align-items: flex-start; }
+  .killer-play { flex: 0 0 540px; align-self: flex-start; }
+  .analysis { flex: 1 1 auto; position: sticky; top: 16px; }
+}
+
+/* --- Rules --- */
+.rules-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 0.88rem;
+}
+.rules-card summary { cursor: pointer; font-weight: 700; }
+.rules-card ul { margin: 8px 0 2px; padding-left: 20px; line-height: 1.5; color: var(--text-dim); }
+.rules-card strong { color: var(--text); }
+
+.tag.bad { color: var(--error-text); border-color: var(--error-text); }
+
+/* --- Board: HTML cells underneath, SVG line work on top --- */
+.board.kboard {
+  gap: 0;
+  border: none;
+  background: var(--panel);
+}
+.kboard .cell {
+  /* The SVG draws every line; drop the classic board's 3x3 separators. */
+  border: none !important;
+  font-size: clamp(16px, 3.8vw, 27px);
+}
+.kboard-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.kboard-lines .grid-line { stroke: var(--grid-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.kboard-lines .diag-line { stroke: var(--diag-line); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.kboard-lines .region-line {
+  stroke: var(--thick-line);
+  stroke-width: 3;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+}
+.kboard-lines .outer-line {
+  fill: none;
+  stroke: var(--thick-line);
+  stroke-width: 6;
+  vector-effect: non-scaling-stroke;
+}
+.kboard-lines .cage-line {
+  stroke: var(--cage-line);
+  stroke-width: 2.2;
+  stroke-dasharray: 7 5;
+}
+.kboard-lines .cage.active .cage-line { stroke: var(--candidate-color); stroke-width: 4.5; }
+.kboard-lines .cage.bad .cage-line { stroke: var(--error-text); stroke-width: 4; }
+
+.cage-sum {
+  position: absolute;
+  top: 3%;
+  left: 5%;
+  font-size: clamp(8px, 1.9vw, 12px);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+  pointer-events: none;
+}
+.cell-value { line-height: 1; }
+
+/* Keep pencil marks inside the cage outline and clear of the sum label. */
+.kboard .notes-grid {
+  width: 74%;
+  height: 66%;
+  margin-top: 14%;
+  font-size: clamp(7px, 1.4vw, 10px);
+  line-height: 1;
+}
+
+.toggle-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* --- Decision support panel --- */
+.analysis {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px 18px;
+  box-shadow: var(--shadow);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.analysis h2 { margin: 0 0 10px; font-size: 1.1rem; }
+.analysis section + section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+.analysis h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.analysis p { margin: 6px 0 0; }
+.analysis .muted { color: var(--text-dim); font-weight: 400; }
+.analysis .good { color: var(--success); font-weight: 600; }
+.analysis .bad { color: var(--error-text); font-weight: 600; }
+
+.chip-row, .combo-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.chip.cand { color: var(--candidate-color); border-color: var(--candidate-color); }
+.chip.must { color: var(--accent); border-color: var(--accent); }
+[data-theme='dark'] .chip.must { color: var(--user-text); border-color: var(--user-text); }
+
+.combo {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+.combo.ruled-out {
+  border-color: var(--border);
+  color: var(--text-dim);
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.eliminations { margin-top: 8px; font-size: 0.82rem; }
+.eliminations ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-dim); }
+.eliminations li + li { margin-top: 3px; }
+.eliminations strong { color: var(--text); }
+
+.unit-row + .unit-row { margin-top: 10px; }
+.unit-name { font-weight: 600; margin-bottom: 4px; }
+.rule45 { margin-top: 4px; color: var(--text-dim); font-size: 0.82rem; }
+.rule45 strong { color: var(--text); }
