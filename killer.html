@@ -60,6 +60,14 @@
             <button class="cand-btn" data-mode="fewest">Fewest options</button>
           </div>
         </div>
+        <div class="candidates-row">
+          <span class="candidates-label" title="Also remove digits ruled out by deduction: digits a cage must contain, naked pairs/triples, and locked candidates.">Eliminations</span>
+          <div class="candidate-select" role="group" aria-label="Deduction depth for candidates">
+            <button class="cand-btn deduce-btn" data-deduce="off" title="Only the direct rules: digits already in the row/column/region/diagonal/cage, and cage sums">Off</button>
+            <button class="cand-btn deduce-btn active" data-deduce="step" title="Apply each deduction once to the current candidates">One step</button>
+            <button class="cand-btn deduce-btn" data-deduce="full" title="Repeat deductions until nothing changes — on this puzzle that gives away most of the solution">Until stable</button>
+          </div>
+        </div>
 
         <div class="controls">
           <div class="numpad" id="numpad">

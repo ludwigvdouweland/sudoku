@@ -138,6 +138,149 @@ export function computeCandidates(model, board) {
   return cand;
 }
 
+// ---------------------------------------------------------------------------
+// Deductions ("smart" candidates)
+//
+// Starts from computeCandidates() and applies the eliminations a human makes
+// with pencil marks, in passes. Each pass looks only at the candidates as they
+// stood when the pass began, so a single pass is "one step" of reasoning; more
+// passes let deductions build on each other (on this puzzle that chain
+// reaches nearly the whole solution, which is why callers choose the depth):
+//  1. Cage sums: a digit goes if its cage can no longer reach its sum with it.
+//  2. Cage-reserved digits: if every still-possible combination of a cage
+//     contains digit d, and all cage cells that can take d share a row,
+//     column, region or diagonal, d can't go anywhere else in that unit
+//     (e.g. a 2-cell cage of 4 = {1,3} in one row reserves 1 and 3 there).
+//  3. Naked subsets: N cells of a unit or cage whose candidates together are
+//     exactly N digits reserve those digits (pairs, triples, quads).
+//  4. Locked candidates: if within one unit digit d fits only in cells that
+//     all lie in a second unit, d can't go elsewhere in that second unit.
+// Every rule only removes digits that provably can't be there, so the true
+// digit always survives; nothing is ever placed on the board.
+// ---------------------------------------------------------------------------
+
+const MAX_SUBSET = 4;
+
+const cellName = ([r, c]) => `r${r + 1}c${c + 1}`;
+const listDigits = (mask) => maskToDigits(mask).join(', ');
+const cageLabel = (cage) => `cage ${cage.sum} (${cage.cells.map(cellName).join(', ')})`;
+
+function combinations(items, k, start = 0, acc = [], out = []) {
+  if (acc.length === k) {
+    out.push(acc.slice());
+    return out;
+  }
+  for (let i = start; i <= items.length - (k - acc.length); i++) {
+    acc.push(items[i]);
+    combinations(items, k, i + 1, acc, out);
+    acc.pop();
+  }
+  return out;
+}
+
+/**
+ * Candidates after deductions. Returns { cand, reasons }: cand as in
+ * computeCandidates(); reasons[r][c] lists { mask, text } for the digits the
+ * deductions removed from that cell (beyond the direct rule checks).
+ * `passes` limits the depth (Infinity = repeat until nothing changes).
+ */
+export function deduceCandidates(model, board, { passes = 1 } = {}) {
+  const cand = computeCandidates(model, board);
+  const reasons = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => []));
+  let changed = true;
+
+  const eliminate = (r, c, mask, text) => {
+    const hit = cand[r][c] & mask;
+    if (board[r][c] || !hit) return;
+    cand[r][c] &= ~hit;
+    reasons[r][c].push({ mask: hit, text });
+    changed = true;
+  };
+
+  const unitSets = model.units.map((u) => new Set(u.cells.map(([r, c]) => r * SIZE + c)));
+  const unitsContaining = (cells) =>
+    model.units.map((_, i) => i).filter((i) => cells.every(([r, c]) => unitSets[i].has(r * SIZE + c)));
+
+  // All-different groups: every unit, plus every cage.
+  const groups = model.units.map((u) => ({ cells: u.cells, label: u.label.toLowerCase() }))
+    .concat(model.cages.map((cage) => ({ cells: cage.cells, label: cageLabel(cage) })));
+
+  for (let pass = 0; changed && pass < Math.min(passes, 100); pass++) {
+    changed = false;
+    // Rules read the candidates as they were at the start of the pass (`view`)
+    // and write eliminations to `cand`, so within a pass nothing chains.
+    const view = cand.map((row) => row.slice());
+
+    // 1. Cage sums with the current candidates.
+    for (const cage of model.cages) {
+      const empty = cage.cells.filter(([r, c]) => !board[r][c]);
+      if (!empty.length) continue;
+      const remaining = cage.sum - maskSum(placedMask(board, cage.cells));
+      const reachable = cageAssignments(empty.map(([r, c]) => view[r][c]), remaining);
+      empty.forEach(([r, c], i) => {
+        eliminate(r, c, ~reachable[i] & ALL_DIGITS, `${cageLabel(cage)} can't reach its sum with it`);
+      });
+    }
+
+    // 2. Digits a cage is sure to contain, confined to one unit.
+    model.cages.forEach((cage, i) => {
+      const { mustContain } = analyzeCage(model, board, view, i);
+      const inCage = new Set(cage.cells.map(([r, c]) => r * SIZE + c));
+      for (const d of maskToDigits(mustContain)) {
+        const holders = cage.cells.filter(([r, c]) => !board[r][c] && (view[r][c] & bit(d)));
+        if (!holders.length) continue;
+        for (const u of unitsContaining(holders)) {
+          for (const [r, c] of model.units[u].cells) {
+            if (inCage.has(r * SIZE + c)) continue;
+            eliminate(r, c, bit(d),
+              `${cageLabel(cage)} must contain ${d}, and it can only go in ${holders.map(cellName).join('/')} — all in ${model.units[u].label.toLowerCase()}`);
+          }
+        }
+      }
+    });
+
+    // 3. Naked subsets in every unit and cage.
+    for (const group of groups) {
+      const empty = group.cells.filter(([r, c]) => !board[r][c]);
+      for (let k = 1; k <= Math.min(MAX_SUBSET, empty.length - 1); k++) {
+        for (const subset of combinations(empty, k)) {
+          let union = 0;
+          for (const [r, c] of subset) union |= view[r][c];
+          if (popcount(union) !== k) continue;
+          const names = subset.map(cellName).join(', ');
+          const text = k === 1
+            ? `${names} can only be ${listDigits(union)} (same ${group.label})`
+            : `${names} can only hold ${listDigits(union)} between them — reserved in ${group.label}`;
+          for (const [r, c] of empty) {
+            if (subset.some(([sr, sc]) => sr === r && sc === c)) continue;
+            eliminate(r, c, union, text);
+          }
+        }
+      }
+    }
+
+    // 4. Locked candidates between units.
+    model.units.forEach((unit, a) => {
+      const placed = placedMask(board, unit.cells);
+      for (let d = 1; d <= 9; d++) {
+        if (placed & bit(d)) continue;
+        const holders = unit.cells.filter(([r, c]) => !board[r][c] && (view[r][c] & bit(d)));
+        if (!holders.length) continue;
+        for (const b of unitsContaining(holders)) {
+          if (b === a) continue;
+          for (const [r, c] of model.units[b].cells) {
+            if (unitSets[a].has(r * SIZE + c)) continue;
+            eliminate(r, c, bit(d),
+              `in ${unit.label.toLowerCase()}, ${d} can only go in ${holders.map(cellName).join('/')} — all in ${model.units[b].label.toLowerCase()}`);
+          }
+        }
+      }
+    });
+  }
+
+  return { cand, reasons };
+}
+
 /**
  * For cells with option masks `options`, returns per cell the digits that
  * occur in at least one assignment of distinct digits totalling `target`.

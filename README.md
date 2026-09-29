@@ -53,7 +53,10 @@ HTTPS.
   irregular jigsaw regions. Decision support only — no solver, no solution
   in the page: rule-based candidates (row/column/region/diagonal/cage,
   including cage-sum reachability), each cage's digit combinations with the
-  ruled-out ones struck through, naked/hidden singles, rule-of-45 hints per
+  ruled-out ones struck through, naked/hidden singles, optional
+  eliminations (digits a cage must contain, naked pairs/triples, locked
+  candidates — one step at a time or repeated until stable, each with its
+  reason), rule-of-45 hints per
   unit, and conflict flags (repeats and cage sums that can't work). Notes,
   undo, and Reset Board; progress is kept in `localStorage`.
 - **History & stats panel** (📜 button) — every generated/loaded puzzle is

@@ -6,7 +6,7 @@
 
 import { PUZZLE } from './killer-puzzle.js';
 import {
-  SIZE, bit, maskToDigits, buildModel, computeCandidates, findConflicts,
+  SIZE, bit, maskToDigits, buildModel, computeCandidates, deduceCandidates, findConflicts,
   analyzeCage, hiddenSingles, ruleOf45, missingDigits, isComplete,
 } from './killer-logic.js';
 import { sfx } from './sounds.js';
@@ -14,6 +14,7 @@ import { sfx } from './sounds.js';
 const model = buildModel(PUZZLE);
 const STORAGE_KEY = `killer:progress:v1:${PUZZLE.id}`;
 const CANDIDATE_MODES = ['off', 'selected', 'all', 'fewest'];
+const DEDUCE_PASSES = { step: 1, full: Infinity };
 const MAX_UNDO = 300;
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ const state = {
   selected: null, // [r, c]
   notesMode: false,
   candidateMode: 'off', // 'off' | 'selected' | 'all' | 'fewest'
+  deduce: 'step', // deduction depth for candidates: 'off' | 'step' | 'full'
   undo: [], // snapshots of { board, notes } before each change
   solved: false,
 };
@@ -50,7 +52,8 @@ const resetBtn = document.getElementById('resetBtn');
 const analysisBody = document.getElementById('analysisBody');
 const themeToggle = document.getElementById('themeToggle');
 const soundToggle = document.getElementById('soundToggle');
-const candButtons = Array.from(document.querySelectorAll('.cand-btn'));
+const candButtons = Array.from(document.querySelectorAll('.cand-btn[data-mode]'));
+const deduceButtons = Array.from(document.querySelectorAll('.deduce-btn'));
 
 const cellEls = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
 const cageGroups = []; // SVG <g> per cage, for highlight/error styling
@@ -65,6 +68,7 @@ function saveProgress() {
       board: state.board,
       notes: state.notes,
       candidateMode: state.candidateMode,
+      deduce: state.deduce,
     }));
   } catch (err) {
     console.warn('Killer Sudoku: failed to save progress', err);
@@ -79,6 +83,7 @@ function loadProgress() {
     if (valid(saved.board)) state.board = saved.board.map((row) => row.map((v) => (v >= 1 && v <= 9 ? v : 0)));
     if (valid(saved.notes)) state.notes = saved.notes.map((row) => row.map((m) => (Number(m) || 0) & 0x1ff));
     if (CANDIDATE_MODES.includes(saved.candidateMode)) state.candidateMode = saved.candidateMode;
+    if (saved.deduce === 'off' || DEDUCE_PASSES[saved.deduce]) state.deduce = saved.deduce;
   } catch (err) {
     console.warn('Killer Sudoku: failed to load progress', err);
   }
@@ -351,7 +356,9 @@ function findFewestCandidateCells(cand) {
 
 function render() {
   const { board, notes, selected } = state;
-  const cand = computeCandidates(model, board);
+  const { cand, reasons } = state.deduce !== 'off'
+    ? deduceCandidates(model, board, { passes: DEDUCE_PASSES[state.deduce] })
+    : { cand: computeCandidates(model, board), reasons: null };
   const conflicts = findConflicts(model, board);
   const peers = selected ? peersOf(selected[0], selected[1]) : new Set();
   const selectedValue = selected ? board[selected[0]][selected[1]] : 0;
@@ -422,7 +429,7 @@ function render() {
   undoBtn.disabled = state.undo.length === 0;
   notesBtn.setAttribute('aria-pressed', String(state.notesMode));
 
-  renderAnalysis(cand, conflicts);
+  renderAnalysis(cand, reasons, conflicts);
 }
 
 // ---------------------------------------------------------------------------
@@ -436,14 +443,16 @@ function chips(digits, cls = '') {
   return digits.map((d) => `<span class="chip ${cls}">${d}</span>`).join('');
 }
 
-function renderAnalysis(cand, conflicts) {
+function renderAnalysis(cand, reasons, conflicts) {
   if (!state.selected) {
     analysisBody.innerHTML = `
       <p class="muted">Select a cell to see its candidates, its cage's possible digit
       combinations, and what's still missing from its row, column, region and diagonals.</p>
-      <p class="muted">Candidates follow directly from the rules and the digits on the
-      board — there's no solver behind them, so they never reveal the answer, and a wrong
-      digit you enter is only flagged once it breaks a rule.</p>`;
+      <p class="muted">Candidates follow from the rules and the digits on the board. With
+      <em>Eliminations</em> on, they also apply the deductions you'd make with pencil
+      marks — digits a cage is sure to contain, naked pairs/triples, locked candidates — and
+      each cell lists why digits were ruled out. There's no solver or stored answer behind
+      them, so a wrong digit you enter is only flagged once it breaks a rule.</p>`;
     return;
   }
 
@@ -465,6 +474,12 @@ function renderAnalysis(cand, conflicts) {
     else if (digits.length === 1) notes.push(`<p class="good">Only ${digits[0]} fits here (naked single).</p>`);
     for (const { unitIndex, digit } of singles) {
       notes.push(`<p class="good">${digit} can only go here in ${model.units[unitIndex].label.toLowerCase()} (hidden single).</p>`);
+    }
+    const why = reasons ? reasons[r][c] : [];
+    if (why.length) {
+      notes.push(`<div class="eliminations"><div class="muted">Ruled out by deduction:</div><ul>${
+        why.map(({ mask, text }) => `<li><strong>${maskToDigits(mask).join(', ')}</strong> — ${text}</li>`).join('')
+      }</ul></div>`);
     }
     sections.push(`
       <section>
@@ -560,6 +575,18 @@ window.addEventListener('keydown', sfx.init, { once: true });
 // Event wiring
 // ---------------------------------------------------------------------------
 
+function setDeduce(level) {
+  state.deduce = level;
+  deduceButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.deduce === level));
+  render();
+  saveProgress();
+}
+
+deduceButtons.forEach((btn) => btn.addEventListener('click', () => {
+  sfx.click();
+  setDeduce(btn.dataset.deduce);
+}));
+
 candButtons.forEach((btn) => btn.addEventListener('click', () => {
   sfx.click();
   setCandidateMode(btn.dataset.mode);
@@ -643,5 +670,6 @@ loadProgress();
 buildBoardDom();
 buildLinesSvg();
 candButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.mode === state.candidateMode));
+deduceButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.deduce === state.deduce));
 render();
 state.solved = isComplete(model, state.board);

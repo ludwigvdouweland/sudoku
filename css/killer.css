@@ -164,6 +164,11 @@
   opacity: 0.6;
 }
 
+.eliminations { margin-top: 8px; font-size: 0.82rem; }
+.eliminations ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-dim); }
+.eliminations li + li { margin-top: 3px; }
+.eliminations strong { color: var(--text); }
+
 .unit-row + .unit-row { margin-top: 10px; }
 .unit-name { font-weight: 600; margin-bottom: 4px; }
 .rule45 { margin-top: 4px; color: var(--text-dim); font-size: 0.82rem; }
